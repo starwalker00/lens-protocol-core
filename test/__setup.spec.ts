@@ -22,6 +22,8 @@ import {
   FollowerOnlyReferenceModule,
   FollowerOnlyReferenceModule__factory,
   FollowNFT__factory,
+  GiveawayCollectModule,
+  GiveawayCollectModule__factory,
   Helper,
   Helper__factory,
   InteractionLogic__factory,
@@ -113,6 +115,7 @@ export let collectNFTImpl: CollectNFT;
 export let feeCollectModule: FeeCollectModule;
 export let timedFeeCollectModule: TimedFeeCollectModule;
 export let freeCollectModule: FreeCollectModule;
+export let giveawayCollectModule: GiveawayCollectModule;
 export let revertCollectModule: RevertCollectModule;
 export let limitedFeeCollectModule: LimitedFeeCollectModule;
 export let limitedTimedFeeCollectModule: LimitedTimedFeeCollectModule;
@@ -230,6 +233,9 @@ before(async function () {
   limitedTimedFeeCollectModule = await new LimitedTimedFeeCollectModule__factory(deployer).deploy(
     lensHub.address,
     moduleGlobals.address
+  );
+  giveawayCollectModule = await new GiveawayCollectModule__factory(deployer).deploy(
+    lensHub.address
   );
 
   feeFollowModule = await new FeeFollowModule__factory(deployer).deploy(

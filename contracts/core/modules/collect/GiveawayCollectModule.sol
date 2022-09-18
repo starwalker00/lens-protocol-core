@@ -120,4 +120,12 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
         uint256 pubId = _pubByRequestId[requestId].pubIdPointed;
         _dataByPublicationByProfile[profileId][pubId].status = GiveawayStatus.Done;
     }
+
+    function getPublicationData(uint256 profileId, uint256 pubId)
+        external
+        view
+        returns (GiveawayPublicationData memory)
+    {
+        return _dataByPublicationByProfile[profileId][pubId];
+    }
 }
