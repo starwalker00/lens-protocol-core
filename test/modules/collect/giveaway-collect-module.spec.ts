@@ -29,10 +29,13 @@ import {
   userAddress,
   userTwo,
   userTwoAddress,
+  vrfCoordinatorV2Mock
 } from '../../__setup.spec';
 
 makeSuiteCleanRoom('Fee Collect Module', function () {
   const DEFAULT_COLLECT_PRICE = parseEther('10');
+  const DEFAULT_GIVEAWAY_AMOUNT = parseEther('0.1');
+  const DEFAULT_COLLECT_AMOUNT = 2;
 
   beforeEach(async function () {
     await expect(
@@ -48,13 +51,16 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
     await expect(
       lensHub.connect(governance).whitelistCollectModule(giveawayCollectModule.address, true)
     ).to.not.be.reverted;
+    await expect(
+      vrfCoordinatorV2Mock.createSubscription()
+    ).to.not.be.reverted;
   });
 
   context('Scenarios', function () {
     it('User should post with fee collect module as the collect module and data, correct events should be emitted', async function () {
       const collectModuleInitData = abiCoder.encode(
         ['uint256', 'uint256'],
-        [parseEther('0.1'), 2]
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
       );
 
       const tx = lensHub.post({
@@ -85,7 +91,7 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
     it('User should post with the fee collect module as the collect module and data, fetched publication data should be accurate', async function () {
       const collectModuleInitData = abiCoder.encode(
         ['uint256', 'uint256'],
-        [parseEther('0.1'), 2]
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
       );
       await expect(
         lensHub.post({
@@ -100,260 +106,161 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
       const postTimestamp = await getTimestamp();
 
       const fetchedData = await giveawayCollectModule.getPublicationData(FIRST_PROFILE_ID, 1);
-      expect(fetchedData.currencyAmount).to.eq(parseEther('0.1'));
-      expect(fetchedData.collectAmount).to.eq(2);
+      expect(fetchedData.currencyAmount).to.eq(DEFAULT_GIVEAWAY_AMOUNT);
+      expect(fetchedData.collectAmount).to.eq(DEFAULT_COLLECT_AMOUNT);
     });
 
-    // it('User should post with the fee collect module as the collect module and data, allowing non-followers to collect, user two collects without following, fee distribution is valid', async function () {
-    //   const collectModuleInitData = abiCoder.encode(
-    //     ['uint256', 'address', 'address', 'uint16', 'bool'],
-    //     [DEFAULT_COLLECT_PRICE, currency.address, userAddress, REFERRAL_FEE_BPS, false]
-    //   );
-    //   await expect(
-    //     lensHub.post({
-    //       profileId: FIRST_PROFILE_ID,
-    //       contentURI: MOCK_URI,
-    //       collectModule: feeCollectModule.address,
-    //       collectModuleInitData: collectModuleInitData,
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
-    // 
-    //   await expect(currency.mint(userTwoAddress, MAX_UINT256)).to.not.be.reverted;
-    //   await expect(
-    //     currency.connect(userTwo).approve(feeCollectModule.address, MAX_UINT256)
-    //   ).to.not.be.reverted;
-    //   const data = abiCoder.encode(
-    //     ['address', 'uint256'],
-    //     [currency.address, DEFAULT_COLLECT_PRICE]
-    //   );
-    //   await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, data)).to.not.be.reverted;
+    it('User should post with the giveaway collect module as the collect module and data, user two should be able to collect', async function () {
+      const collectModuleInitData = abiCoder.encode(
+        ['uint256', 'uint256'],
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
+      );
+      await expect(
+        lensHub.post({
+          profileId: FIRST_PROFILE_ID,
+          contentURI: MOCK_URI,
+          collectModule: giveawayCollectModule.address,
+          collectModuleInitData: collectModuleInitData,
+          referenceModule: ZERO_ADDRESS,
+          referenceModuleInitData: [],
+        })
+      ).to.not.be.reverted;
+      // let a = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      // console.log(a);
+      await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, [])).to.not.be.reverted;
+    });
 
-    //   const expectedTreasuryAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .mul(TREASURY_FEE_BPS)
-    //     .div(BPS_MAX);
-    //   const expectedRecipientAmount =
-    //     BigNumber.from(DEFAULT_COLLECT_PRICE).sub(expectedTreasuryAmount);
+    it('Module should trigger request randomness when collect amount is reached', async function () {
+      const collectModuleInitData = abiCoder.encode(
+        ['uint256', 'uint256'],
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
+      );
+      await expect(
+        lensHub.post({
+          profileId: FIRST_PROFILE_ID,
+          contentURI: MOCK_URI,
+          collectModule: giveawayCollectModule.address,
+          collectModuleInitData: collectModuleInitData,
+          referenceModule: ZERO_ADDRESS,
+          referenceModuleInitData: [],
+        })
+      ).to.not.be.reverted;
+      console.log("first collect:");
+      let tx1 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      console.log("tx1");
+      console.log(tx1);
+      console.log("second collect:");
+      // let tx2 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      // console.log("tx2");
+      // console.log(tx2);
+      await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, [])).to.emit(
+        giveawayCollectModule,
+        "RandomnessRequested"
+      ).withArgs(1, lensHub.address, FIRST_PROFILE_ID, 1);
+    });
 
-    //   expect(await currency.balanceOf(userTwoAddress)).to.eq(
-    //     BigNumber.from(MAX_UINT256).sub(DEFAULT_COLLECT_PRICE)
-    //   );
-    //   expect(await currency.balanceOf(userAddress)).to.eq(expectedRecipientAmount);
-    //   expect(await currency.balanceOf(treasuryAddress)).to.eq(expectedTreasuryAmount);
-    // });
+    it("VRF coordinator should successfully receive the request", async function () {
+      const collectModuleInitData = abiCoder.encode(
+        ['uint256', 'uint256'],
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
+      );
+      await expect(
+        lensHub.post({
+          profileId: FIRST_PROFILE_ID,
+          contentURI: MOCK_URI,
+          collectModule: giveawayCollectModule.address,
+          collectModuleInitData: collectModuleInitData,
+          referenceModule: ZERO_ADDRESS,
+          referenceModuleInitData: [],
+        })
+      ).to.not.be.reverted;
+      console.log("first collect:");
+      let tx1 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      console.log("tx1");
+      console.log(tx1);
+      console.log("second collect:");
+      // let tx2 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      // console.log("tx2");
+      // console.log(tx2);
+      await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, [])).to.emit(
+        vrfCoordinatorV2Mock,
+        "RandomWordsRequested"
+      );
+    })
 
-    // it('User should post with the fee collect module as the collect module and data, user two follows, then collects and pays fee, fee distribution is valid', async function () {
-    //   const collectModuleInitData = abiCoder.encode(
-    //     ['uint256', 'address', 'address', 'uint16', 'bool'],
-    //     [DEFAULT_COLLECT_PRICE, currency.address, userAddress, REFERRAL_FEE_BPS, true]
-    //   );
-    //   await expect(
-    //     lensHub.post({
-    //       profileId: FIRST_PROFILE_ID,
-    //       contentURI: MOCK_URI,
-    //       collectModule: feeCollectModule.address,
-    //       collectModuleInitData: collectModuleInitData,
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
+    it("VRF coordinator should fulfill Random Number request", async () => {
+      const collectModuleInitData = abiCoder.encode(
+        ['uint256', 'uint256'],
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
+      );
+      await expect(
+        lensHub.post({
+          profileId: FIRST_PROFILE_ID,
+          contentURI: MOCK_URI,
+          collectModule: giveawayCollectModule.address,
+          collectModuleInitData: collectModuleInitData,
+          referenceModule: ZERO_ADDRESS,
+          referenceModuleInitData: [],
+        })
+      ).to.not.be.reverted;
+      console.log("first collect:");
+      let tx1 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      console.log("tx1");
+      console.log(tx1);
+      console.log("second collect:");
+      let tx2 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      console.log("tx2");
+      console.log(tx2);
+      let receipt2 = await tx2.wait();
+      console.log(receipt2);
+      // TODO : get requestId from contract event , event is triggered by vrfCoordinatorV2Mock contract, not lensHub
+      // const event = receipt2.events?.find(event => event.event === 'RandomnessRequested');
+      // console.log(event);
+      // const args = event?.args;
+      // console.log(args);
+      let requestId = 1;
+      await expect(
+        vrfCoordinatorV2Mock.fulfillRandomWords(requestId, giveawayCollectModule.address)
+      ).to.emit(vrfCoordinatorV2Mock, "RandomWordsFulfilled")
+    });
 
-    //   await expect(currency.mint(userTwoAddress, MAX_UINT256)).to.not.be.reverted;
-    //   await expect(
-    //     currency.connect(userTwo).approve(feeCollectModule.address, MAX_UINT256)
-    //   ).to.not.be.reverted;
-    //   await expect(lensHub.connect(userTwo).follow([FIRST_PROFILE_ID], [[]])).to.not.be.reverted;
-    //   const data = abiCoder.encode(
-    //     ['address', 'uint256'],
-    //     [currency.address, DEFAULT_COLLECT_PRICE]
-    //   );
-    //   await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, data)).to.not.be.reverted;
-
-    //   const expectedTreasuryAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .mul(TREASURY_FEE_BPS)
-    //     .div(BPS_MAX);
-    //   const expectedRecipientAmount =
-    //     BigNumber.from(DEFAULT_COLLECT_PRICE).sub(expectedTreasuryAmount);
-
-    //   expect(await currency.balanceOf(userTwoAddress)).to.eq(
-    //     BigNumber.from(MAX_UINT256).sub(DEFAULT_COLLECT_PRICE)
-    //   );
-    //   expect(await currency.balanceOf(userAddress)).to.eq(expectedRecipientAmount);
-    //   expect(await currency.balanceOf(treasuryAddress)).to.eq(expectedTreasuryAmount);
-    // });
-
-    // it('User should post with the fee collect module as the collect module and data, user two follows, then collects twice, fee distribution is valid', async function () {
-    //   const collectModuleInitData = abiCoder.encode(
-    //     ['uint256', 'address', 'address', 'uint16', 'bool'],
-    //     [DEFAULT_COLLECT_PRICE, currency.address, userAddress, REFERRAL_FEE_BPS, true]
-    //   );
-    //   await expect(
-    //     lensHub.post({
-    //       profileId: FIRST_PROFILE_ID,
-    //       contentURI: MOCK_URI,
-    //       collectModule: feeCollectModule.address,
-    //       collectModuleInitData: collectModuleInitData,
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
-
-    //   await expect(currency.mint(userTwoAddress, MAX_UINT256)).to.not.be.reverted;
-    //   await expect(
-    //     currency.connect(userTwo).approve(feeCollectModule.address, MAX_UINT256)
-    //   ).to.not.be.reverted;
-    //   await expect(lensHub.connect(userTwo).follow([FIRST_PROFILE_ID], [[]])).to.not.be.reverted;
-    //   const data = abiCoder.encode(
-    //     ['address', 'uint256'],
-    //     [currency.address, DEFAULT_COLLECT_PRICE]
-    //   );
-    //   await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, data)).to.not.be.reverted;
-    //   await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, data)).to.not.be.reverted;
-
-    //   const expectedTreasuryAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .mul(TREASURY_FEE_BPS)
-    //     .div(BPS_MAX);
-    //   const expectedRecipientAmount =
-    //     BigNumber.from(DEFAULT_COLLECT_PRICE).sub(expectedTreasuryAmount);
-
-    //   expect(await currency.balanceOf(userTwoAddress)).to.eq(
-    //     BigNumber.from(MAX_UINT256).sub(BigNumber.from(DEFAULT_COLLECT_PRICE).mul(2))
-    //   );
-    //   expect(await currency.balanceOf(userAddress)).to.eq(expectedRecipientAmount.mul(2));
-    //   expect(await currency.balanceOf(treasuryAddress)).to.eq(expectedTreasuryAmount.mul(2));
-    // });
-
-    // it('User should post with the fee collect module as the collect module and data, user two mirrors, follows, then collects from their mirror and pays fee, fee distribution is valid', async function () {
-    //   const secondProfileId = FIRST_PROFILE_ID + 1;
-    //   const collectModuleInitData = abiCoder.encode(
-    //     ['uint256', 'address', 'address', 'uint16', 'bool'],
-    //     [DEFAULT_COLLECT_PRICE, currency.address, userAddress, REFERRAL_FEE_BPS, true]
-    //   );
-
-    //   await expect(
-    //     lensHub.post({
-    //       profileId: FIRST_PROFILE_ID,
-    //       contentURI: MOCK_URI,
-    //       collectModule: feeCollectModule.address,
-    //       collectModuleInitData: collectModuleInitData,
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
-
-    //   await expect(
-    //     lensHub.connect(userTwo).createProfile({
-    //       to: userTwoAddress,
-    //       handle: 'usertwo',
-    //       imageURI: MOCK_PROFILE_URI,
-    //       followModule: ZERO_ADDRESS,
-    //       followModuleInitData: [],
-    //       followNFTURI: MOCK_FOLLOW_NFT_URI,
-    //     })
-    //   ).to.not.be.reverted;
-    //   await expect(
-    //     lensHub.connect(userTwo).mirror({
-    //       profileId: secondProfileId,
-    //       profileIdPointed: FIRST_PROFILE_ID,
-    //       pubIdPointed: 1,
-    //       referenceModuleData: [],
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
-
-    //   await expect(currency.mint(userTwoAddress, MAX_UINT256)).to.not.be.reverted;
-    //   await expect(
-    //     currency.connect(userTwo).approve(feeCollectModule.address, MAX_UINT256)
-    //   ).to.not.be.reverted;
-    //   await expect(lensHub.connect(userTwo).follow([FIRST_PROFILE_ID], [[]])).to.not.be.reverted;
-    //   const data = abiCoder.encode(
-    //     ['address', 'uint256'],
-    //     [currency.address, DEFAULT_COLLECT_PRICE]
-    //   );
-    //   await expect(lensHub.connect(userTwo).collect(secondProfileId, 1, data)).to.not.be.reverted;
-
-    //   const expectedTreasuryAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .mul(TREASURY_FEE_BPS)
-    //     .div(BPS_MAX);
-    //   const expectedReferralAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .sub(expectedTreasuryAmount)
-    //     .mul(REFERRAL_FEE_BPS)
-    //     .div(BPS_MAX);
-    //   const expectedReferrerAmount = BigNumber.from(MAX_UINT256)
-    //     .sub(DEFAULT_COLLECT_PRICE)
-    //     .add(expectedReferralAmount);
-    //   const expectedRecipientAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .sub(expectedTreasuryAmount)
-    //     .sub(expectedReferralAmount);
-
-    //   expect(await currency.balanceOf(userTwoAddress)).to.eq(expectedReferrerAmount);
-    //   expect(await currency.balanceOf(userAddress)).to.eq(expectedRecipientAmount);
-    //   expect(await currency.balanceOf(treasuryAddress)).to.eq(expectedTreasuryAmount);
-    // });
-
-    // it('User should post with the fee collect module as the collect module and data, with no referral fee, user two mirrors, follows, then collects from their mirror and pays fee, fee distribution is valid', async function () {
-    //   const secondProfileId = FIRST_PROFILE_ID + 1;
-    //   const collectModuleInitData = abiCoder.encode(
-    //     ['uint256', 'address', 'address', 'uint16', 'bool'],
-    //     [DEFAULT_COLLECT_PRICE, currency.address, userAddress, 0, true]
-    //   );
-
-    //   await expect(
-    //     lensHub.post({
-    //       profileId: FIRST_PROFILE_ID,
-    //       contentURI: MOCK_URI,
-    //       collectModule: feeCollectModule.address,
-    //       collectModuleInitData: collectModuleInitData,
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
-
-    //   await expect(
-    //     lensHub.connect(userTwo).createProfile({
-    //       to: userTwoAddress,
-    //       handle: 'usertwo',
-    //       imageURI: MOCK_PROFILE_URI,
-    //       followModule: ZERO_ADDRESS,
-    //       followModuleInitData: [],
-    //       followNFTURI: MOCK_FOLLOW_NFT_URI,
-    //     })
-    //   ).to.not.be.reverted;
-    //   await expect(
-    //     lensHub.connect(userTwo).mirror({
-    //       profileId: secondProfileId,
-    //       profileIdPointed: FIRST_PROFILE_ID,
-    //       pubIdPointed: 1,
-    //       referenceModuleData: [],
-    //       referenceModule: ZERO_ADDRESS,
-    //       referenceModuleInitData: [],
-    //     })
-    //   ).to.not.be.reverted;
-
-    //   await expect(currency.mint(userTwoAddress, MAX_UINT256)).to.not.be.reverted;
-    //   await expect(
-    //     currency.connect(userTwo).approve(feeCollectModule.address, MAX_UINT256)
-    //   ).to.not.be.reverted;
-    //   await expect(lensHub.connect(userTwo).follow([FIRST_PROFILE_ID], [[]])).to.not.be.reverted;
-    //   const data = abiCoder.encode(
-    //     ['address', 'uint256'],
-    //     [currency.address, DEFAULT_COLLECT_PRICE]
-    //   );
-    //   await expect(lensHub.connect(userTwo).collect(secondProfileId, 1, data)).to.not.be.reverted;
-
-    //   const expectedTreasuryAmount = BigNumber.from(DEFAULT_COLLECT_PRICE)
-    //     .mul(TREASURY_FEE_BPS)
-    //     .div(BPS_MAX);
-    //   const expectedRecipientAmount =
-    //     BigNumber.from(DEFAULT_COLLECT_PRICE).sub(expectedTreasuryAmount);
-
-    //   expect(await currency.balanceOf(userTwoAddress)).to.eq(
-    //     BigNumber.from(MAX_UINT256).sub(DEFAULT_COLLECT_PRICE)
-    //   );
-    //   expect(await currency.balanceOf(userAddress)).to.eq(expectedRecipientAmount);
-    //   expect(await currency.balanceOf(treasuryAddress)).to.eq(expectedTreasuryAmount);
-    // });
+    it("Module should properly execute the giveaway", async () => {
+      const collectModuleInitData = abiCoder.encode(
+        ['uint256', 'uint256'],
+        [DEFAULT_GIVEAWAY_AMOUNT, DEFAULT_COLLECT_AMOUNT]
+      );
+      await expect(
+        lensHub.post({
+          profileId: FIRST_PROFILE_ID,
+          contentURI: MOCK_URI,
+          collectModule: giveawayCollectModule.address,
+          collectModuleInitData: collectModuleInitData,
+          referenceModule: ZERO_ADDRESS,
+          referenceModuleInitData: [],
+        })
+      ).to.not.be.reverted;
+      console.log("first collect:");
+      let tx1 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      console.log("tx1");
+      console.log(tx1);
+      console.log("second collect:");
+      let tx2 = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
+      console.log("tx2");
+      console.log(tx2);
+      let receipt2 = await tx2.wait();
+      console.log(receipt2);
+      let requestId = 1;
+      // verify status is not "Done" (2)
+      const fetchedDataBefore = await giveawayCollectModule.getPublicationData(FIRST_PROFILE_ID, 1);
+      expect(fetchedDataBefore.status).to.not.eq(2);
+      console.log(fetchedDataBefore);
+      await expect(
+        vrfCoordinatorV2Mock.fulfillRandomWords(requestId, giveawayCollectModule.address)
+      ).to.emit(giveawayCollectModule, "RandomnessReceived");
+      // verify status is "Done" (2)
+      const fetchedDataAfter = await giveawayCollectModule.getPublicationData(FIRST_PROFILE_ID, 1);
+      console.log(fetchedDataAfter);
+      expect(fetchedDataAfter.status).to.eq(2);
+    });
   });
 });

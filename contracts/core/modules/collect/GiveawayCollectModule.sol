@@ -10,6 +10,7 @@ import {IERC721Enumerable} from '@openzeppelin/contracts/token/ERC721/extensions
 import {ILensHub} from '../../../interfaces/ILensHub.sol';
 import '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
 import '@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol';
+error Bug();
 
 /**
  * @title GiveawayCollectModule
@@ -23,7 +24,7 @@ import '@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol';
 contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 {
     // VRF temporary config
     VRFCoordinatorV2Interface COORDINATOR;
-    address vrfCoordinator = 0x2Ca8E0C643bDe4C2E08ab1fA0da3401AdAD7734D;
+    // address vrfCoordinator = 0x2Ca8E0C643bDe4C2E08ab1fA0da3401AdAD7734D;
     bytes32 keyHash = 0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15;
     uint32 callbackGasLimit = 100000;
     uint16 requestConfirmations = 3;
@@ -50,8 +51,19 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
     // Maps VRF request to a publication
     mapping(uint256 => DataTypes.PublicationStruct) internal _pubByRequestId;
 
-    constructor(address hub) ModuleBase(hub) VRFConsumerBaseV2(vrfCoordinator) {
-        COORDINATOR = VRFCoordinatorV2Interface(vrfCoordinator);
+    event RandomnessRequested(
+        uint256 s_requestId,
+        address requester,
+        uint256 profileId,
+        uint256 pubId
+    );
+    event RandomnessReceived(uint256 s_requestId, uint256 profileId, uint256 pubId);
+
+    constructor(address hub, address vrfCoordinatorV2)
+        ModuleBase(hub)
+        VRFConsumerBaseV2(vrfCoordinatorV2)
+    {
+        COORDINATOR = VRFCoordinatorV2Interface(vrfCoordinatorV2);
     }
 
     /**
@@ -94,7 +106,7 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
         }
         address collectNFT = ILensHub(HUB).getCollectNFT(profileId, pubId);
         uint256 totalSupply = IERC721Enumerable(collectNFT).totalSupply();
-        if (_dataByPublicationByProfile[profileId][pubId].collectAmount >= totalSupply) {
+        if (totalSupply >= _dataByPublicationByProfile[profileId][pubId].collectAmount) {
             // _triggerGiveaway();
             _requestRandomWords(profileId, pubId);
         }
@@ -113,11 +125,13 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
         _dataByPublicationByProfile[profileId][pubId].s_requestId = requestId; // not strictly necessary
         _pubByRequestId[requestId].profileIdPointed = profileId;
         _pubByRequestId[requestId].pubIdPointed = pubId;
+        emit RandomnessRequested(requestId, msg.sender, profileId, pubId);
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] memory randomWords) internal override {
         uint256 profileId = _pubByRequestId[requestId].profileIdPointed;
         uint256 pubId = _pubByRequestId[requestId].pubIdPointed;
+        emit RandomnessReceived(requestId, profileId, pubId);
         _dataByPublicationByProfile[profileId][pubId].status = GiveawayStatus.Done;
     }
 

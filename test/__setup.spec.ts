@@ -54,6 +54,8 @@ import {
   CollectNFT,
   RevertFollowModule,
   RevertFollowModule__factory,
+  VRFCoordinatorV2Mock,
+  VRFCoordinatorV2Mock__factory
 } from '../typechain-types';
 import { LensHubLibraryAddresses } from '../typechain-types/factories/LensHub__factory';
 import { FAKE_PRIVATEKEY, ZERO_ADDRESS } from './helpers/constants';
@@ -110,6 +112,9 @@ export let followNFTImpl: FollowNFT;
 export let collectNFTImpl: CollectNFT;
 
 /* Modules */
+
+// Mocks
+export let vrfCoordinatorV2Mock: VRFCoordinatorV2Mock;
 
 // Collect
 export let feeCollectModule: FeeCollectModule;
@@ -215,6 +220,9 @@ before(async function () {
   // Currency
   currency = await new Currency__factory(deployer).deploy();
 
+  // Mocks
+  vrfCoordinatorV2Mock = await new VRFCoordinatorV2Mock__factory(deployer).deploy(0, 0);
+
   // Modules
   freeCollectModule = await new FreeCollectModule__factory(deployer).deploy(lensHub.address);
   revertCollectModule = await new RevertCollectModule__factory(deployer).deploy();
@@ -235,7 +243,8 @@ before(async function () {
     moduleGlobals.address
   );
   giveawayCollectModule = await new GiveawayCollectModule__factory(deployer).deploy(
-    lensHub.address
+    lensHub.address,
+    vrfCoordinatorV2Mock.address
   );
 
   feeFollowModule = await new FeeFollowModule__factory(deployer).deploy(
