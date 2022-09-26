@@ -22,6 +22,7 @@ import {
   MOCK_PROFILE_URI,
   MOCK_URI,
   moduleGlobals,
+  provider,
   REFERRAL_FEE_BPS,
   treasuryAddress,
   TREASURY_FEE_BPS,
@@ -34,7 +35,7 @@ import {
 
 makeSuiteCleanRoom('Fee Collect Module', function () {
   const DEFAULT_COLLECT_PRICE = parseEther('10');
-  const DEFAULT_GIVEAWAY_AMOUNT = parseEther('0.1');
+  const DEFAULT_GIVEAWAY_AMOUNT = parseEther('1.337');
   const DEFAULT_COLLECT_AMOUNT = 2;
 
   beforeEach(async function () {
@@ -53,6 +54,12 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
     ).to.not.be.reverted;
     await expect(
       vrfCoordinatorV2Mock.createSubscription()
+    ).to.not.be.reverted;
+    await expect( // fund the contract for testing purposes 
+      user.sendTransaction({
+        to: giveawayCollectModule.address,
+        value: parseEther("10"),
+      })
     ).to.not.be.reverted;
   });
 
@@ -125,8 +132,6 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
           referenceModuleInitData: [],
         })
       ).to.not.be.reverted;
-      // let a = await lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, []);
-      // console.log(a);
       await expect(lensHub.connect(userTwo).collect(FIRST_PROFILE_ID, 1, [])).to.not.be.reverted;
     });
 
@@ -250,6 +255,9 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
       let receipt2 = await tx2.wait();
       console.log(receipt2);
       let requestId = 1;
+      const balanceContractBefore = await provider.getBalance(giveawayCollectModule.address);
+      console.log("balanceContractBefore");
+      console.log(balanceContractBefore.toString());
       // verify status is not "Done" (2)
       const fetchedDataBefore = await giveawayCollectModule.getPublicationData(FIRST_PROFILE_ID, 1);
       expect(fetchedDataBefore.status).to.not.eq(2);
@@ -261,6 +269,13 @@ makeSuiteCleanRoom('Fee Collect Module', function () {
       const fetchedDataAfter = await giveawayCollectModule.getPublicationData(FIRST_PROFILE_ID, 1);
       console.log(fetchedDataAfter);
       expect(fetchedDataAfter.status).to.eq(2);
+
+      // verify balances
+      const balanceContractAfter = await provider.getBalance(giveawayCollectModule.address);
+      console.log("balanceContractAfter");
+      console.log(balanceContractAfter.toString());
+      expect(balanceContractBefore.sub(balanceContractAfter)).to.equal(parseEther("1.337"));
+
     });
   });
 });

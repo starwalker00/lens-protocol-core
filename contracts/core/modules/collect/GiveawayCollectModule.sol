@@ -10,6 +10,8 @@ import {IERC721Enumerable} from '@openzeppelin/contracts/token/ERC721/extensions
 import {ILensHub} from '../../../interfaces/ILensHub.sol';
 import '@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol';
 import '@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol';
+import {IERC721} from '@openzeppelin/contracts/token/ERC721/IERC721.sol';
+
 error Bug();
 
 /**
@@ -34,7 +36,8 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
     enum GiveawayStatus {
         Active,
         Triggered,
-        Done
+        Done,
+        Failed
     }
     struct GiveawayPublicationData {
         uint256 currencyAmount;
@@ -83,7 +86,10 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
         bytes calldata data
     ) external override onlyHub returns (bytes memory) {
         (uint256 currencyAmount, uint256 collectAmount) = abi.decode(data, (uint256, uint256));
-        _dataByPublicationByProfile[profileId][pubId].currencyAmount = currencyAmount;
+
+        // following doesn't work because overidden initializePublicationCollectModule() cannot be payable
+        //_dataByPublicationByProfile[profileId][pubId].currencyAmount = msg.value;
+        _dataByPublicationByProfile[profileId][pubId].currencyAmount = 1.337 ether;
         _dataByPublicationByProfile[profileId][pubId].collectAmount = collectAmount;
         _dataByPublicationByProfile[profileId][pubId].status = GiveawayStatus.Active;
         return data;
@@ -132,6 +138,18 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
         uint256 profileId = _pubByRequestId[requestId].profileIdPointed;
         uint256 pubId = _pubByRequestId[requestId].pubIdPointed;
         emit RandomnessReceived(requestId, profileId, pubId);
+        uint256 currencyAmount = _dataByPublicationByProfile[profileId][pubId].currencyAmount;
+        _dataByPublicationByProfile[profileId][pubId].s_randomWord = randomWords[0];
+
+        // pick winner
+        address collectNFT = ILensHub(HUB).getCollectNFT(profileId, pubId);
+        uint256 totalSupply = IERC721Enumerable(collectNFT).totalSupply();
+        uint256 winningTokenId = randomWords[0] % totalSupply;
+        address winner = IERC721(collectNFT).ownerOf(winningTokenId);
+
+        // transfer
+        bool sent = payable(winner).send(currencyAmount);
+        require(sent, 'Failed to send Ether');
         _dataByPublicationByProfile[profileId][pubId].status = GiveawayStatus.Done;
     }
 
@@ -142,4 +160,6 @@ contract GiveawayCollectModule is ModuleBase, ICollectModule, VRFConsumerBaseV2 
     {
         return _dataByPublicationByProfile[profileId][pubId];
     }
+
+    receive() external payable {} // tmeporary, for testing purposes
 }

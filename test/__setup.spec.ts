@@ -1,6 +1,7 @@
 import { AbiCoder } from '@ethersproject/contracts/node_modules/@ethersproject/abi';
 import { parseEther } from '@ethersproject/units';
 import '@nomiclabs/hardhat-ethers';
+import { HardhatEthersHelpers } from '@nomiclabs/hardhat-ethers/types';
 import { expect, use } from 'chai';
 import { solidity } from 'ethereum-waffle';
 import { BytesLike, Signer, Wallet } from 'ethers';
@@ -87,6 +88,7 @@ export const MOCK_FOLLOW_NFT_URI =
 
 export let accounts: Signer[];
 export let deployer: Signer;
+export let provider: HardhatEthersHelpers["provider"];
 export let user: Signer;
 export let userTwo: Signer;
 export let userThree: Signer;
@@ -151,6 +153,7 @@ export function makeSuiteCleanRoom(name: string, tests: () => void) {
 before(async function () {
   abiCoder = ethers.utils.defaultAbiCoder;
   testWallet = new ethers.Wallet(FAKE_PRIVATEKEY).connect(ethers.provider);
+  provider = ethers.provider;
   accounts = await ethers.getSigners();
   deployer = accounts[0];
   user = accounts[1];
